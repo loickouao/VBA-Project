@@ -126,7 +126,7 @@ Sub fetch_data()
                 
                 ' Store the number of Closed Complete
                 If LCase(ws.Cells(i, 4).Value) = "closed complete" Then
-                    If Not codeYearDict.Exists(code) Then
+                    If Not nbclosedCompleteDict.Exists(code) Then
                         nbclosedCompleteDict.Add code, CInt(1)
                     Else
                         nbclosedCompleteDict(code) = nbclosedCompleteDict(code) + CInt(1)
@@ -179,10 +179,10 @@ Sub fetch_data()
     Next i
     
     
-    'ws.Columns(newcodeColumnIndex).Delete
-    'ws.Columns(newcodeColumnIndex).Delete
-    'ws.Columns(newcodeColumnIndex).Delete
-    'ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
 NextIteration:
 
 End Sub
