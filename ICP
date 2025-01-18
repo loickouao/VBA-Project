@@ -1,0 +1,231 @@
+Sub fetch_icp_data()
+    Dim wb_gsn_bcp_plan As Workbook
+    Dim wb_app_code As Workbook
+    
+    Dim wb_gsn_bcp_plan_name As String
+    Dim wb_app_code_name As String
+    
+    Dim ws As Worksheet
+    Dim ws_appcode As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim cellValue As String
+    Dim regex As Object
+    Dim regex_description As Object
+    Dim nbclosedCompleteDict As Object
+    Dim matches As Object
+    Dim result As String
+    Dim num_column As Integer
+    Dim num_description_column As Integer
+    Dim codeYearDict As Object
+    Dim latestYears As Object
+    Dim code As String
+    Dim rowyear As Variant
+    Dim decriptionValue As String
+    Dim tmp_code As Variant
+    Dim maxYear As Long
+    
+    ' Get the value from cell B1 and B2 and assign it to variables
+    wb_gsn_bcp_plan_name = ThisWorkbook.Sheets(2).Range("B1").Value
+    wb_app_code_name = ThisWorkbook.Sheets(2).Range("B2").Value
+    
+    ' Load the workbook using the name stored in variable
+    On Error Resume Next
+    Set wb_gsn_bcp_plan = Workbooks.Open(wb_gsn_bcp_plan_name)
+    On Error GoTo 0
+    
+    If wb_gsn_bcp_plan Is Nothing Then
+        MsgBox "Workbook not found: " & wb_gsn_bcp_plan_name, vbExclamation
+        GoTo NextIteration
+    End If
+    
+    ' Load the workbook using the name stored in variable
+    On Error Resume Next
+    Set wb_app_code = Workbooks.Open(wb_app_code_name)
+    On Error GoTo 0
+    
+    If wb_app_code Is Nothing Then
+        MsgBox "Workbook not found2: " & wb_app_code_name, vbExclamation
+        GoTo NextIteration
+    End If
+    
+    Set ws = wb_gsn_bcp_plan.Sheets(1)
+    Set ws_appcode = wb_app_code.Sheets(1)
+    
+    ' EXTRACT code AP Columns
+    num_column = 1 ' Assuming column A
+    ' Initialize the regex object
+    Set regex = CreateObject("VBScript.RegExp")
+    regex.Pattern = "AP\d+" ' Pattern to match "AP" followed by digits
+    regex.Global = True
+    
+    
+    ' Clear any filters on the worksheet
+    If ws.AutoFilterMode Then ws.AutoFilter.ShowAllData
+    
+    ' Find the last row in the specified column (adjust column number if needed)
+    lastRow = ws.Cells(ws.Rows.Count, num_column).End(xlUp).Row ' Assuming column B
+    ' Determine the new column index (e.g., next empty column)
+    codeColumn = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
+    markColumn = codeColumn + 1
+    nbApprouveColumn = markColumn + 1
+    
+    ' Set the header for the new column
+    ws.Cells(1, codeColumn).Value = "Code"
+    ws.Cells(1, markColumn).Value = "Latest"
+    ws.Cells(1, nbApprouveColumn).Value = "Nb Approuvé"
+    
+    dateColumn = 4
+
+    ' Create a dictionary to store the latest date for each code
+    Set codeDateDict = CreateObject("Scripting.Dictionary")
+    Set nbclosedCompleteDict = CreateObject("Scripting.Dictionary")
+    
+    ' Loop through the "Actif(GRC)" column
+    For i = 2 To lastRow ' Start from row 2 if row 1 is a header
+        
+        cellValue = ws.Cells(i, num_column).Value
+        ' Check for matches
+        code = ""
+        If regex.Test(cellValue) Then
+            Set matches = regex.Execute(cellValue)
+            ' Write the first match to the new column
+            code = matches(0)
+            ws.Cells(i, codeColumn).Value = code
+        Else
+            code = get_code_from_name(ws_appcode, cellValue)
+            ws.Cells(i, codeColumn).Value = code
+            If code = "" Then
+                color_row = 3 ' red
+                ws.Cells(i, 1).Interior.ColorIndex = color_row
+            End If
+             
+        End If
+        If code <> "" Then
+            updateDate = ws.Cells(i, dateColumn).Value
+            ' Check if code is already in the dictionary
+            If Not codeDateDict.Exists(code) Then
+                ' Add code with the current date
+                codeDateDict.Add code, updateDate
+            Else
+                ' Update if the current date is more recent
+                If updateDate > codeDateDict(code) Then
+                    codeDateDict(code) = updateDate
+                End If
+            End If
+            
+            ' Store the number of Closed Complete
+            If LCase(ws.Cells(i, 3).Value) = "approuvé" Then
+                If Not nbclosedCompleteDict.Exists(code) Then
+                    nbclosedCompleteDict.Add code, CInt(1)
+                Else
+                    nbclosedCompleteDict(code) = nbclosedCompleteDict(code) + CInt(1)
+                End If
+            End If
+        End If
+        
+    Next i
+    
+    ' Second pass: Mark rows based on the latest date
+    For i = 2 To lastRow
+        code = ws.Cells(i, codeColumn).Value
+        
+        nb_closed_complete = nbclosedCompleteDict(code)
+        ws.Cells(i, nbApprouveColumn).Value = nb_closed_complete
+        
+        If code <> "" Then
+            updateDate = ws.Cells(i, dateColumn).Value
+            
+            ' Compare each date with the latest date from the dictionary
+            If updateDate = codeDateDict(code) Then
+                ws.Cells(i, markColumn).Value = 1 ' Mark as 1 for the latest date
+                
+                etat = ws.Cells(i, 3).Value
+                valid_date = ws.Cells(i, 5).Value
+                copy_to_suivi_sheet CStr(code), CStr(etat), CStr(valid_date), CInt(nb_closed_complete)
+            Else
+                ws.Cells(i, markColumn).Value = 0 ' Mark as 0 for other dates
+            End If
+        Else
+            ws.Cells(i, markColumn).Value = 0
+        End If
+    Next i
+    
+    
+    ws.Columns(codeColumn).Delete
+    ws.Columns(codeColumn).Delete
+    ws.Columns(codeColumn).Delete
+
+NextIteration:
+
+End Sub
+
+ 
+Function get_code_from_name(ByRef ws_appcode As Worksheet, name As String)
+
+    Dim name_column As Integer
+    Dim foundCell As Range
+
+    name_column = 1
+    Set foundCell = ws_appcode.Columns(name_column).Find(What:=name, LookIn:=xlValues, LookAt:=xlWhole)
+    
+    If Not foundCell Is Nothing Then
+        row_identified = foundCell.Row
+        code_columns = 2
+        get_code_from_name = ws_appcode.Cells(row_identified, code_columns).Value
+        
+    End If
+
+End Function
+
+
+Sub copy_to_suivi_sheet(code As String, etat As String, valid_date As String, nb_closed_complete As Integer)
+    Dim wb_destination As Worksheet
+
+    Dim code_column As Integer
+    Dim lastRowDest As Long
+    Dim foundCell As Range
+    
+    Set wb_destination = ThisWorkbook.Sheets(1)
+    code_column = 2
+    
+    lastRowDest = wb_destination.Cells(wb_destination.Rows.Count, code_column).End(xlUp).Row ' Column B of destination sheet
+    
+    ' Check if the code already exists in column B of the destination sheet
+    Set foundCell = wb_destination.Columns(code_column).Find(What:=code, LookIn:=xlValues, LookAt:=xlWhole)
+    
+    ' If code does not exist, copy the entire row to the destination sheet
+    If foundCell Is Nothing Then
+        lastRowDest = lastRowDest + 1
+        wb_destination.Cells(lastRowDest, 2).Value = code
+        wb_destination.Cells(lastRowDest, 17).Value = etat
+        wb_destination.Cells(lastRowDest, 18).Value = valid_date
+        wb_destination.Rows(lastRowDest).EntireRow.Interior.ColorIndex = 6 'yellow
+    Else
+        row_identified = foundCell.Row
+        If wb_destination.Cells(row_identified, 17).Value <> etat Then
+            wb_destination.Cells(row_identified, 17).Value = etat
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 17).Interior.ColorIndex = color_row
+        
+        If wb_destination.Cells(row_identified, 18).Value <> valid_date Then
+            wb_destination.Cells(row_identified, 18).Value = valid_date
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 18).Interior.ColorIndex = color_row
+        
+        If wb_destination.Cells(row_identified, 19).Value <> nb_closed_complete Then
+            wb_destination.Cells(row_identified, 19).Value = nb_closed_complete
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 19).Interior.ColorIndex = color_row
+    End If
+End Sub
+
