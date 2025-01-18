@@ -179,10 +179,10 @@ Sub fetch_data()
     Next i
     
     
-    ws.Columns(newcodeColumnIndex).Delete
-    ws.Columns(newcodeColumnIndex).Delete
-    ws.Columns(newcodeColumnIndex).Delete
-    ws.Columns(newcodeColumnIndex).Delete
+    'ws.Columns(newcodeColumnIndex).Delete
+    'ws.Columns(newcodeColumnIndex).Delete
+    'ws.Columns(newcodeColumnIndex).Delete
+    'ws.Columns(newcodeColumnIndex).Delete
 NextIteration:
 
 End Sub
