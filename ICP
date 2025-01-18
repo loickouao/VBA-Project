@@ -130,7 +130,6 @@ Sub fetch_icp_data()
     For i = 2 To lastRow
         code = ws.Cells(i, codeColumn).Value
         
-        'nb_closed_complete = nbclosedCompleteDict(code)
         If Not nbclosedCompleteDict.Exists(code) Then
             nb_closed_complete = 0
         Else
@@ -205,6 +204,7 @@ Sub copy_to_suivi_sheet(code As String, etat As String, valid_date As String, nb
         wb_destination.Cells(lastRowDest, 2).Value = code
         wb_destination.Cells(lastRowDest, 17).Value = etat
         wb_destination.Cells(lastRowDest, 18).Value = valid_date
+        wb_destination.Cells(lastRowDest, 19).Value = nb_closed_complete
         wb_destination.Rows(lastRowDest).EntireRow.Interior.ColorIndex = 6 'yellow
     Else
         row_identified = foundCell.Row
