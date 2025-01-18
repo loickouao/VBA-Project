@@ -124,8 +124,8 @@ Sub fetch_data()
                     codeYearDict(code) = codeYearDict(code) & "," & rowyear
                 End If
                 
-                ' Store the number of closed complete
-                If ws.Cells(i, 4).Value = "Closed complete" Then
+                ' Store the number of Closed Complete
+                If LCase(ws.Cells(i, 4).Value) = "closed complete" Then
                     If Not codeYearDict.Exists(code) Then
                         nbclosedCompleteDict.Add code, CInt(1)
                     Else
