@@ -1,0 +1,280 @@
+Sub fetch_data()
+    Dim wb_grc_asset As Workbook
+    Dim wb_grc_profile As Workbook
+    
+    Dim wb_grc_asset_name As String
+    Dim wb_grc_profile_name As String
+    
+    Dim ws As Worksheet
+    Dim ws_profile As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim cellValue As String
+    Dim regex As Object
+    Dim regex_description As Object
+    Dim matches As Object
+    Dim result As String
+    Dim num_column As Integer
+    Dim num_description_column As Integer
+    Dim position_suivie_sheet_config As Integer
+    Dim position_grc_asset_sheet As Integer
+    Dim codeYearDict As Object
+    Dim nbclosedCompleteDict As Object
+    Dim latestYears As Object
+    Dim code As String
+    Dim rowyear As Variant
+    Dim decriptionValue As String
+    Dim tmp_code As Variant
+    Dim maxYear As Long
+    Dim nb_closed_complete As Integer
+    
+    position_suivie_sheet_config = 2
+    position_grc_asset_sheet = 1
+    position_profile_sheet = 1
+    
+    ' Get the value from cell B1 and B2 and assign it to variables
+    wb_grc_asset_name = ThisWorkbook.Sheets(position_suivie_sheet_config).Range("B1").Value
+    wb_grc_profile_name = ThisWorkbook.Sheets(position_suivie_sheet_config).Range("B2").Value
+    
+    ' Load the workbook using the name stored in variable
+    On Error Resume Next
+    Set wb_grc_asset = Workbooks.Open(wb_grc_asset_name)
+    On Error GoTo 0
+    
+    If wb_grc_asset Is Nothing Then
+        MsgBox "Workbook not found: " & wb_grc_asset_name, vbExclamation
+        GoTo NextIteration
+    End If
+    
+     ' Load the workbook using the name stored in variable
+    On Error Resume Next
+    Set wb_grc_profile = Workbooks.Open(wb_grc_profile_name)
+    On Error GoTo 0
+    
+    If wb_grc_asset Is Nothing Then
+        MsgBox "Workbook not found: " & wb_grc_profile_name, vbExclamation
+        GoTo NextIteration
+    End If
+    
+    Set ws = wb_grc_asset.Sheets(position_grc_asset_sheet)
+    Set ws_profile = wb_grc_profile.Sheets(position_profile_sheet)
+    
+    ' EXTRACT code AP Columns
+    num_column = 2 ' Assuming column B
+    ' Initialize the regex object
+    Set regex = CreateObject("VBScript.RegExp")
+    regex.Pattern = "AP\d+" ' Pattern to match "AP" followed by digits
+    regex.Global = True
+    
+    num_description_column = 5 ' Assuming column E "Description brève" column (column 5)
+    Set regex_description = CreateObject("VBScript.RegExp")
+    regex_description.Pattern = "\b(20\d{2})\b" ' Pattern to match years from 2000 to 2099
+    regex_description.Global = True
+    
+    ' Find the last row in the specified column (adjust column number if needed)
+    lastRow = ws.Cells(ws.Rows.Count, num_column).End(xlUp).Row ' Assuming column B
+    ' Determine the new column index (e.g., next empty column)
+    newcodeColumnIndex = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column + 1
+    newyearColumnIndex = newcodeColumnIndex + 1
+    newlatestyearColumnIndex = newyearColumnIndex + 1
+    newnb_closed_completeColumnIndex = newlatestyearColumnIndex + 1
+    
+    ' Set the header for the new column
+    ws.Cells(1, newcodeColumnIndex).Value = "Code"
+    ws.Cells(1, newyearColumnIndex).Value = "Year"
+    ws.Cells(1, newlatestyearColumnIndex).Value = "Latest Year"
+    ws.Cells(1, newnb_closed_completeColumnIndex).Value = "Nb Closed Complete"
+    
+    
+    ' Create dictionary objects to hold years for each code
+    Set codeYearDict = CreateObject("Scripting.Dictionary")
+    Set latestYears = CreateObject("Scripting.Dictionary")
+    Set nbclosedCompleteDict = CreateObject("Scripting.Dictionary")
+    
+    ' Loop through the "Actif(GRC)" column
+    For i = 2 To lastRow ' Start from row 2 if row 1 is a header
+        
+        cellValue = ws.Cells(i, num_column).Value ' Adjust column index if "Actif(GRC)" is a different column
+        ' Check for matches
+        code = ""
+        If regex.Test(cellValue) Then
+            Set matches = regex.Execute(cellValue)
+            ' Write the first match to the new column
+            code = matches(0)
+            ws.Cells(i, newcodeColumnIndex).Value = code
+            
+            decriptionValue = ws.Cells(i, num_description_column).Value ' Adjust column index if "Description brève" is a different column
+            rowyear = "" ' Initialize as empty string
+            If regex_description.Test(decriptionValue) Then
+                Set matches2 = regex_description.Execute(decriptionValue)
+                rowyear = CLng(matches2(0)) ' Convert to Long
+                ws.Cells(i, newyearColumnIndex).Value = rowyear
+            End If
+            
+            If rowyear = "" Then
+                rowyear = Year(CDate(ws.Cells(i, 10).Value))
+                ws.Cells(i, newyearColumnIndex).Value = rowyear
+            End If
+            
+            ' Store the years for each code
+            If code <> "" & rowyear <> "" Then
+                If Not codeYearDict.Exists(code) Then
+                    codeYearDict.Add code, CStr(rowyear)
+                Else
+                    codeYearDict(code) = codeYearDict(code) & "," & rowyear
+                End If
+                
+                ' Store the number of closed complete
+                If ws.Cells(i, 4).Value = "Closed complete" Then
+                    If Not codeYearDict.Exists(code) Then
+                        nbclosedCompleteDict.Add code, CInt(1)
+                    Else
+                        nbclosedCompleteDict(code) = nbclosedCompleteDict(code) + CInt(1)
+                    End If
+                End If
+                
+            End If
+        End If
+    Next i
+    
+    ' Second pass: Determine the latest year for each code
+    For Each tmp_code In codeYearDict.Keys
+        years = Split(codeYearDict(tmp_code), ",")
+        maxYear = 0
+        
+        ' Find the maximum year
+        For i = LBound(years) To UBound(years)
+            If IsNumeric(years(i)) Then
+                If CLng(years(i)) > maxYear Then
+                    maxYear = CLng(years(i))
+                End If
+            End If
+        Next i
+        latestYears.Add tmp_code, maxYear
+    Next tmp_code
+    
+    
+    ' Third pass: Mark the latest year
+    For i = 2 To lastRow
+        code = ws.Cells(i, newcodeColumnIndex).Value
+        rowyear = ws.Cells(i, newyearColumnIndex).Value
+        
+        nb_closed_complete = nbclosedCompleteDict(code)
+        ws.Cells(i, newnb_closed_completeColumnIndex).Value = nb_closed_complete
+    
+        ' Mark as 1 if it's the latest year, otherwise 0
+        If IsNumeric(rowyear) And latestYears.Exists(code) Then
+            If CLng(rowyear) = latestYears(code) Then
+                ws.Cells(i, newlatestyearColumnIndex).Value = 1
+                
+                etat = ws.Cells(i, 4).Value
+                copy_to_suivi_sheet CStr(code), CStr(etat), CStr(rowyear), CInt(nb_closed_complete)
+                copy_profile_data ws_profile, CStr(code)
+            Else
+                ws.Cells(i, newlatestyearColumnIndex).Value = 0
+            End If
+        Else
+            ws.Cells(i, newlatestyearColumnIndex).Value = 0
+        End If
+    Next i
+    
+    
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+    ws.Columns(newcodeColumnIndex).Delete
+NextIteration:
+
+End Sub
+
+
+Sub copy_to_suivi_sheet(code As String, etat As String, rowyear As String, nb_closed_complete As Integer)
+    Dim wb_destination As Worksheet
+
+    Dim code_column As Integer
+    Dim lastRowDest As Long
+    Dim foundCell As Range
+    
+    Set wb_destination = ThisWorkbook.Sheets(1)
+    code_column = 2
+    
+    lastRowDest = wb_destination.Cells(wb_destination.Rows.Count, code_column).End(xlUp).Row ' Column B of destination sheet
+    
+    ' Check if the code already exists in column B of the destination sheet
+    Set foundCell = wb_destination.Columns(code_column).Find(What:=code, LookIn:=xlValues, LookAt:=xlWhole)
+    
+    ' If code does not exist, copy the entire row to the destination sheet
+    If foundCell Is Nothing Then
+        lastRowDest = lastRowDest + 1
+        wb_destination.Cells(lastRowDest, 2).Value = code
+        wb_destination.Cells(lastRowDest, 17).Value = etat
+        wb_destination.Cells(lastRowDest, 20).Value = rowyear
+        wb_destination.Cells(lastRowDest, 21).Value = nb_closed_complete
+        wb_destination.Rows(lastRowDest).EntireRow.Interior.ColorIndex = 6 'yellow
+    Else
+        row_identified = foundCell.Row
+        If wb_destination.Cells(row_identified, 17).Value <> etat Then
+            wb_destination.Cells(row_identified, 17).Value = etat
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 17).Interior.ColorIndex = color_row
+
+        If wb_destination.Cells(row_identified, 20).Value <> rowyear Then
+            wb_destination.Cells(row_identified, 20).Value = rowyear
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 20).Interior.ColorIndex = color_row
+        
+        If wb_destination.Cells(row_identified, 21).Value <> nb_closed_complete Then
+            wb_destination.Cells(row_identified, 21).Value = nb_closed_complete
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 21).Interior.ColorIndex = color_row
+    End If
+End Sub
+
+Sub copy_profile_data(ByRef ws_profile As Worksheet, code As String)
+    Dim wb_destination As Worksheet
+    Dim code_column As Integer
+    Dim lastRowDest As Long
+    Dim foundCell As Range
+    Dim profilefound As Range
+    
+    Set wb_destination = ThisWorkbook.Sheets(1)
+    code_column = 2
+    ' Check if the code already exists in column B of the destination sheet
+    Set foundCell = wb_destination.Columns(code_column).Find(What:=code, LookIn:=xlValues, LookAt:=xlWhole)
+    
+    code_column = 4
+    Set profilefound = ws_profile.Columns(code_column).Find(What:=code, LookIn:=xlValues, LookAt:=xlWhole)
+    
+    If Not foundCell Is Nothing And Not profilefound Is Nothing Then
+        row_identified = foundCell.Row
+        row_profile_identified = profilefound.Row
+        
+        ' IT continuity Valid to
+        If wb_destination.Cells(row_identified, 18).Value <> ws_profile.Cells(row_profile_identified, 20).Value Then
+            wb_destination.Cells(row_identified, 18).Value = ws_profile.Cells(row_profile_identified, 20).Value
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 18).Interior.ColorIndex = color_row
+        
+        'It Securit& Valid to
+        If wb_destination.Cells(row_identified, 19).Value <> ws_profile.Cells(row_profile_identified, 21).Value Then
+            wb_destination.Cells(row_identified, 19).Value = ws_profile.Cells(row_profile_identified, 21).Value
+            color_row = 6 'yellow
+        Else:
+            color_row = 2 'white
+        End If
+        wb_destination.Cells(row_identified, 19).Interior.ColorIndex = color_row
+        
+    End If
+End Sub
